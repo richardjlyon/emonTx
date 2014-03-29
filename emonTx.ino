@@ -60,8 +60,9 @@ const int CT1 = 1;
 const int CT2 = 1;                                                      
 const int CT3 = 1;                                                      
 
-const int RED = 0;                                                      // EmonCMS LED widget feed value - Red
-const int GREY = 2;                                                     // EmonCMS LED widget feed value - Grey
+// EmonCMS LED widget feed value
+const int RED = 0;                                                      
+const int GREY = 2;                                                     
 
 // Set to 0 if your not using the UNO bootloader (i.e using Duemilanove) - All Atmega's shipped from OpenEnergyMonitor come with Arduino Uno bootloader
 const int UNO = 1;                                                      
@@ -73,16 +74,10 @@ ISR(WDT_vect) { Sleepy::watchdogEvent(); }
 EnergyMonitor ct1,ct2,ct3;                                              
 
 // create structure - a neat way of packaging data for RF comms
-typedef struct { int power1, power2, power3, powerPulse, battery, heatingLED; } PayloadTX;      
+typedef struct { int power1, power2, power3, battery, heatingLED; } PayloadTX;      
 PayloadTX emontx;                                                       
 
 boolean settled = false;
-
-// Pulse counting settings 
-long pulseCount = 0;                                                    // Number of pulses, used to measure energy.
-unsigned long pulseTime,lastTime;                                       // Used to measure power.
-double power, elapsedWh;                                                // power and energy
-int ppwh = 1;                                                           // 1000 pulses/kwh = 1 pulse per wh - Number of pulses per wh - found or set on the meter.
 
 void setup() 
 {
@@ -109,18 +104,21 @@ void setup()
   pinMode(LEDpin, OUTPUT);                                              
   digitalWrite(LEDpin, HIGH);
 
-  if (UNO) wdt_enable(WDTO_8S);                                         // Enable anti crash (restart) watchdog if UNO bootloader is selected. Watchdog does not work with duemilanove bootloader                                                             // Restarts emonTx if sketch hangs for more than 8s
+  // Enable anti crash (restart) watchdog if UNO bootloader is selected. Watchdog does not work with duemilanove bootloader
+  // Restarts emonTx if sketch hangs for more than 8s
+  if (UNO) wdt_enable(WDTO_8S);                                                                                                     
 }
 
 void loop() 
+//NOTE: ct.calcIrms(number of wavelengths sample)*AC RMS voltage
 { 
   if (CT1) {
-    emontx.power1 = ct1.calcIrms(1480) * 240.0;                         //ct.calcIrms(number of wavelengths sample)*AC RMS voltage
+    emontx.power1 = ct1.calcIrms(1480) * 240.0;                         
     Serial.print(emontx.power1); Serial.print(" ");                                      
   }
 
   if (CT2) {
-    emontx.power2 = ct2.calcIrms(1480) * 240.0;                         //ct.calcIrms(number of wavelengths sample)*AC RMS voltage
+    emontx.power2 = ct2.calcIrms(1480) * 240.0;                         
     Serial.print(emontx.power2); Serial.print(" ");                                      
   }
 
@@ -138,13 +136,9 @@ void loop()
   } 
 
   emontx.battery = ct1.readVcc();
-  //emontx.pulse = pulseCount; 
-  pulseCount=0; 
-
-  Serial.print(emontx.powerPulse); Serial.print(" ");                                      
-  //Serial.print(emontx.pulse);
  
-  Serial.println(); delay(100);
+  Serial.println(); 
+  delay(100);
 
   // because millis() returns to zero after 50 days ! 
   if (!settled && millis() > FILTERSETTLETIME) settled = true;
