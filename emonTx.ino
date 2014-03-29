@@ -5,7 +5,7 @@
  Reads CT, pulse, and battery state
  Sends to NanodeRF
 
- v1.1
+ v1.2
  
  Builds upon JeeLabs RF12 library and Arduino
  
@@ -37,32 +37,44 @@
 -------------------------------------------------------------------------------------------------------------
 */
 
-#define FILTERSETTLETIME 5000                                           //  Time (ms) to allow the filters to settle before sending data
+#include <avr/wdt.h>  
+#include "EmonLib.h"
+#include <JeeLib.h>                                                     // Download JeeLib: http://github.com/jcw/jeelib
 
+// Setup onboaard indicator LED
+const int LEDpin = 9;                                                   
+  
+//  Time (ms) to allow the filters to settle before sending data
+#define FILTERSETTLETIME 5000                                           
+
+// Frequency of RF12B module can be RF12_433MHZ, RF12_868MHZ or RF12_915MHZ
+#define freq RF12_868MHZ                                                
+
+// emonTx RFM12B node ID
+const int nodeID = 10; 
+// emonTx RFM12B wireless network group - needs to be same as emonBase and emonGLCD
+const int networkGroup = 210;                                           
+
+// set 0 to disable CT channels
 const int CT1 = 1; 
-const int CT2 = 1;                                                      // Set to 0 to disable CT channel 2
-const int CT3 = 1;                                                      // Set to 0 to disable CT channel 3
+const int CT2 = 1;                                                      
+const int CT3 = 1;                                                      
 
 const int RED = 0;                                                      // EmonCMS LED widget feed value - Red
 const int GREY = 2;                                                     // EmonCMS LED widget feed value - Grey
 
-#define freq RF12_868MHZ                                                // Frequency of RF12B module can be RF12_433MHZ, RF12_868MHZ or RF12_915MHZ. You should use the one matching the module you have.
-const int nodeID = 10;                                                  // emonTx RFM12B node ID
-const int networkGroup = 210;                                           // emonTx RFM12B wireless network group - needs to be same as emonBase and emonGLCD
+// Set to 0 if your not using the UNO bootloader (i.e using Duemilanove) - All Atmega's shipped from OpenEnergyMonitor come with Arduino Uno bootloader
+const int UNO = 1;                                                      
 
-const int UNO = 1;                                                      // Set to 0 if your not using the UNO bootloader (i.e using Duemilanove) - All Atmega's shipped from OpenEnergyMonitor come with Arduino Uno bootloader
-#include <avr/wdt.h>                                                     
+// Attached JeeLib sleep function to Atmega328 watchdog -enables MCU to be put into sleep mode inbetween readings to reduce power consumption 
+ISR(WDT_vect) { Sleepy::watchdogEvent(); }                              
 
-#include <JeeLib.h>                                                     // Download JeeLib: http://github.com/jcw/jeelib
-ISR(WDT_vect) { Sleepy::watchdogEvent(); }                              // Attached JeeLib sleep function to Atmega328 watchdog -enables MCU to be put into sleep mode inbetween readings to reduce power consumption 
+// Create  instances for each CT channel
+EnergyMonitor ct1,ct2,ct3;                                              
 
-#include "EmonLib.h"
-EnergyMonitor ct1,ct2,ct3;                                              // Create  instances for each CT channel
-
-typedef struct { int power1, power2, power3, powerPulse, battery, heatingLED; } PayloadTX;      // create structure - a neat way of packaging data for RF comms
+// create structure - a neat way of packaging data for RF comms
+typedef struct { int power1, power2, power3, powerPulse, battery, heatingLED; } PayloadTX;      
 PayloadTX emontx;                                                       
-
-const int LEDpin = 9;                                                   // On-board emonTx LED 
 
 boolean settled = false;
 
@@ -75,7 +87,7 @@ int ppwh = 1;                                                           // 1000 
 void setup() 
 {
   Serial.begin(57600);
-  Serial.println("emonTX CT123 v1.1"); 
+  Serial.println("emonTX CT123 v1.2"); 
   Serial.println("OpenEnergyMonitor.org");
   Serial.print("Node: "); 
   Serial.print(nodeID); 
@@ -90,14 +102,14 @@ void setup()
   if (CT2) ct2.currentTX(2, 111.1);                                     // Calibration factor = CT ratio / burden resistance
   if (CT3) ct3.currentTX(3, 111.1);                                     // Calibration factor = (100A / 0.05A) / 33 Ohms
   
-  rf12_initialize(nodeID, freq, networkGroup);                          // initialize RFM12B
+  // initialize RFM12B
+  rf12_initialize(nodeID, freq, networkGroup);                          
   rf12_sleep(RF12_SLEEP);
-
-  pinMode(LEDpin, OUTPUT);                                              // Setup indicator LED
-  digitalWrite(LEDpin, HIGH);
   
+  pinMode(LEDpin, OUTPUT);                                              
+  digitalWrite(LEDpin, HIGH);
+
   if (UNO) wdt_enable(WDTO_8S);                                         // Enable anti crash (restart) watchdog if UNO bootloader is selected. Watchdog does not work with duemilanove bootloader                                                             // Restarts emonTx if sketch hangs for more than 8s
-  attachInterrupt(1, onPulse, FALLING);                                 // KWH interrupt attached to IRQ 1  = pin3 - hardwired to emonTx pulse jackplug. For connections see: http://openenergymonitor.org/emon/node/208
 }
 
 void loop() 
@@ -117,7 +129,8 @@ void loop()
     Serial.print(emontx.power3); Serial.print(" ");
   } 
 
-  if (emontx.power3 > 1000) {
+ // set heating LED if drawing more than 1kW
+  if (emontx.power2 > 1000) {
     emontx.heatingLED = RED; 
   }
   else {
@@ -142,13 +155,4 @@ void loop()
     digitalWrite(LEDpin, HIGH); delay(2); digitalWrite(LEDpin, LOW);      // flash LED
     emontx_sleep(5);                                                      // sleep or delay in seconds - see emontx_lib
   }
-}
-
-// The interrupt routine - runs each time a falling edge of a pulse is detected
-void onPulse()                  
-{
-  lastTime = pulseTime;        //used to measure time between pulses.
-  pulseTime = micros();
-  pulseCount++;                                                           //pulseCounter               
-  emontx.powerPulse = int((3600000000.0 / (pulseTime - lastTime))/ppwh);  //Calculate power
 }
